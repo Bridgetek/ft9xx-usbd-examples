@@ -1203,11 +1203,11 @@ static volatile int16_t midi_note_counter = 0;
 
 /* LOCAL FUNCTIONS / INLINES *******************************************************/
 
-static struct pipe *get_pipe(uint8_t pipe)
+static struct USBDX_pipe *get_pipe(uint8_t pipe)
 {
 	// There are 3 URB pipes...
-	static struct pipe pipes[3];
-	struct pipe *ret_val = NULL;
+	static struct USBDX_pipe pipes[3];
+	struct USBDX_pipe *ret_val = NULL;
 
 	switch (pipe) {
 		case MIDI_EP_DATA_IN:
@@ -1230,11 +1230,11 @@ static struct pipe *get_pipe(uint8_t pipe)
 void USBD_pipe_isr(uint16_t pipe_bitfields)
 {
 	if (pipe_bitfields & BIT(MIDI_EP_DATA_IN))
-		usbd_pipe_process(get_pipe(MIDI_EP_DATA_IN));
+		USBDX_pipe_process(get_pipe(MIDI_EP_DATA_IN));
 	if (pipe_bitfields & BIT(MIDI_EP_DATA_OUT))
-		usbd_pipe_process(get_pipe(MIDI_EP_DATA_OUT));
+		USBDX_pipe_process(get_pipe(MIDI_EP_DATA_OUT));
 	if (pipe_bitfields & BIT(KBD_EP_NOTIFICATION))
-		usbd_pipe_process(get_pipe(KBD_EP_NOTIFICATION));
+		USBDX_pipe_process(get_pipe(KBD_EP_NOTIFICATION));
 }
 
 /** @name tfp_putc
@@ -1718,7 +1718,7 @@ void ep_cb(USBD_ENDPOINT_NUMBER ep_number)
 }
 
 /* Signal true for callback. */
-bool midi_out_on_data_ready(struct pipe *pp)
+bool midi_out_on_data_ready(struct USBDX_pipe *pp)
 {
 	return true;
 }
@@ -1738,20 +1738,20 @@ static void midi_init(void)
 
 	static uint8_t midi_in_buf[MIDI_DATA_IN_PACKET_SIZE * URB_MIDI_DATA_IN_COUNT];
 	static uint8_t midi_out_buf[MIDI_DATA_OUT_PACKET_SIZE * URB_MIDI_DATA_OUT_COUNT];
-	static struct urb midi_in_urb[URB_MIDI_DATA_IN_COUNT];
-	static struct urb midi_out_urb[URB_MIDI_DATA_OUT_COUNT];
-	struct pipe *pp;
+	static struct USBDX_urb midi_in_urb[URB_MIDI_DATA_IN_COUNT];
+	static struct USBDX_urb midi_out_urb[URB_MIDI_DATA_OUT_COUNT];
+	struct USBDX_pipe *pp;
 
 	/* ACM */
 	pp = get_pipe(MIDI_EP_DATA_IN);
-	usbd_pipe_init(pp, MIDI_EP_DATA_IN, MIDI_EP_DATA_IN | USB_ENDPOINT_DESCRIPTOR_EPADDR_IN,
+	USBDX_pipe_init(pp, MIDI_EP_DATA_IN, MIDI_EP_DATA_IN | USB_ENDPOINT_DESCRIPTOR_EPADDR_IN,
 			midi_in_urb, midi_in_buf, URB_MIDI_DATA_IN_COUNT);
 
 	pp = get_pipe(MIDI_EP_DATA_OUT);
-	usbd_pipe_init(pp, MIDI_EP_DATA_OUT, MIDI_EP_DATA_OUT,
+	USBDX_pipe_init(pp, MIDI_EP_DATA_OUT, MIDI_EP_DATA_OUT,
 			midi_out_urb, midi_out_buf, URB_MIDI_DATA_OUT_COUNT);
 
-	register_on_usbd_ready(pp, midi_out_on_data_ready);
+	USBDX_register_on_ready(pp, midi_out_on_data_ready);
 }
 
 /**
@@ -1763,11 +1763,11 @@ static void midi_init(void)
 static void kbd_init(void)
 {
 	static uint8_t kbd_int_buf[KBD_NOTIFICATION_EP_SIZE * URB_KBD_COUNT] __attribute__ ((aligned (16)));
-	static struct urb kbd_int_urb[URB_KBD_COUNT];
-	struct pipe *pp;
+	static struct USBDX_urb kbd_int_urb[URB_KBD_COUNT];
+	struct USBDX_pipe *pp;
 
 	pp = get_pipe(KBD_EP_NOTIFICATION);
-	usbd_pipe_init(pp, KBD_EP_NOTIFICATION, KBD_EP_NOTIFICATION | USB_ENDPOINT_DESCRIPTOR_EPADDR_IN,
+	USBDX_pipe_init(pp, KBD_EP_NOTIFICATION, KBD_EP_NOTIFICATION | USB_ENDPOINT_DESCRIPTOR_EPADDR_IN,
 			kbd_int_urb, kbd_int_buf, URB_KBD_COUNT);
 
 	USBD_create_endpoint(KBD_EP_NOTIFICATION, USBD_EP_INT, USBD_DIR_IN,
@@ -1787,13 +1787,13 @@ static void kbd_init(void)
  */
 static void send_midi_note_packet(uint8_t cin, uint8_t cn, uint8_t note, uint8_t force)
 {
-	struct pipe *ppMidi = get_pipe(MIDI_EP_DATA_IN);
+	struct USBDX_pipe *ppMidi = get_pipe(MIDI_EP_DATA_IN);
 
 	CRITICAL_SECTION_BEGIN
 	/* Force acquire USB IN buffer */
-	struct urb *urb = usbd_force_acquire_urb_for_app(ppMidi);
+	struct USBDX_urb *urb = USBDX_force_acquire_urb_for_app(ppMidi);
 
-	uint16_t free = urb_get_app_to_process(urb);
+	uint16_t free = usbdx_urb_get_app_to_process(urb);
 	/* If have enough URB space */
 	if (free >= MIDI_DATA_IN_PACKET_SIZE)
 	{
@@ -1804,7 +1804,7 @@ static void send_midi_note_packet(uint8_t cin, uint8_t cn, uint8_t note, uint8_t
 		pmsg->bMIDI_1 = note;
 		pmsg->bMIDI_2 = force;
 
-		usbd_submit_urb(ppMidi, urb);
+		USBDX_submit_urb(ppMidi, urb);
 	}
 	CRITICAL_SECTION_END
 }
@@ -1824,14 +1824,14 @@ static void send_midi_note_packet(uint8_t cin, uint8_t cn, uint8_t note, uint8_t
 static uint8_t receive_midi_note_packet(uint8_t *cin, uint8_t *cn, uint8_t *note, uint8_t *force)
 {
 	bool valid = false;
-	struct pipe *pp = get_pipe(MIDI_EP_DATA_OUT);
+	struct USBDX_pipe *pp = get_pipe(MIDI_EP_DATA_OUT);
 
 	CRITICAL_SECTION_BEGIN
-	struct urb *urb = usbd_get_app_urb(pp);
+	struct USBDX_urb *urb = usbdx_get_app_urb(pp);
 
-	if (likely(urb_owned_by_app(urb)))
+	if (likely(usbdx_urb_owned_by_app(urb)))
 	{
-		uint16_t urb_len = urb_get_app_to_process(urb);
+		uint16_t urb_len = usbdx_urb_get_app_to_process(urb);
 
 		if (urb_len >= MIDI_DATA_OUT_PACKET_SIZE)
 		{
@@ -1846,14 +1846,14 @@ static uint8_t receive_midi_note_packet(uint8_t *cin, uint8_t *cn, uint8_t *note
 				*force = pmsg->bMIDI_2;
 
 				/* Can send out all URB buffer, queue URB back to USBD */
-				usbd_submit_urb(pp, urb);
+				USBDX_submit_urb(pp, urb);
 				valid = true;
 			}
 		}
 	}
 	else
 	{
-		usbd_set_app_paused(pp);
+		usbdx_set_app_paused(pp);
 		valid = false;
 	}
 
@@ -1875,7 +1875,7 @@ static void composite_test(void)
 	unsigned char kbd_scancode_key;
 	unsigned char kbd_scancode_shift;
 	const char *pmsg = tty_message; // Pointer to message to send to host
-	struct pipe *ppKbd = get_pipe(KBD_EP_NOTIFICATION);
+	struct USBDX_pipe *ppKbd = get_pipe(KBD_EP_NOTIFICATION);
 
 	CRITICAL_SECTION_BEGIN
 	// Wait an initial delay for OS to setup keyboard.
@@ -2037,15 +2037,15 @@ static void composite_test(void)
 
 						CRITICAL_SECTION_BEGIN
 						/* Force acquire USB IN buffer */
-						struct urb *urb = usbd_force_acquire_urb_for_app(ppKbd);
+						struct USBDX_urb *urb = USBDX_force_acquire_urb_for_app(ppKbd);
 
-						uint16_t free = urb_get_app_to_process(urb);
+						uint16_t free = usbdx_urb_get_app_to_process(urb);
 						/* If have enough URB space */
 						if (free >= sizeof(hid_report_structure_t))
 						{
 							asm_memcpy8(&report_buffer, urb->ptr, sizeof(hid_report_structure_t));
 							urb->ptr += sizeof(hid_report_structure_t);
-							usbd_submit_urb(ppKbd, urb);
+							USBDX_submit_urb(ppKbd, urb);
 						}
 						CRITICAL_SECTION_END
 					}
@@ -2156,6 +2156,16 @@ void powermanagement_ISR(void)
 }
 
 /* FUNCTIONS ***********************************************************************/
+
+static __attribute__((constructor)) void fnconst(void)
+{
+	sys_reset_all();
+}
+
+static __attribute__((destructor)) void fndest(void)
+{
+	sys_reset_all();
+}
 
 int main(void)
 {
