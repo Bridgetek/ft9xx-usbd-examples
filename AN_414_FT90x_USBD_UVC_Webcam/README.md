@@ -7,6 +7,8 @@ The device will present a 2 interfaces; the first is a Video Control Interface w
 to understand the capabilities of the device; the second is a Video Streaming Interface. 
 
 ## Documentation
+This code forms part of (Application Note AN_414)[https://brtchip.com/wp-content/uploads/sites/3/2021/07/AN-414-FT90x-UVC-WebCam.pdf].
+
 The documentation for the device class is found in the [USB Video Class 1.1 Document Set](https://www.usb.org/document-library/video-class-v11-document-set).
 
 ## Testing
