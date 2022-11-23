@@ -2,13 +2,14 @@
 This repository stores sample code for the Bridgetek FT9xx series which implement emulations of USB devices. 
 
 ## Background
-The FT9xx has a hardware library which is used to access to the built-in USB device hardware. The library is installed with the [FT9XX Toolchain](http://brtchip.com/ft9xx-toolchain/). Source code for the library and general purpose example code are included with the toolchain and but these can also be accessed via [GitHub](https://github.com/BRTSG-FOSS/ft90x-sdk).
+The FT9xx has a hardware library which is used to access to the built-in USB device hardware. The library is installed with the [FT9XX Toolchain](http://brtchip.com/ft9xx-toolchain/). Source code for the library and general purpose example code are included with the toolchain and but these can also be accessed via GitHub (Bridgetek/ft90x-sdk)[https://github.com/Bridgetek/ft90x-sdk].
 
 Source code for other USB device examples are available as Application Notes from the Bridgetek website.
 
 ## Contents
 The repository contains sample code for the following:
 * USBD Example Composite - Creates a device with a Keyboard interface, MIDI interface and optional DFU interface. The keyboard and MIDI interfaces can be set to send pre-programmed data to the host to cause typing to appear on the host and play a tune to a MIDI controlled program.
+* AN_414 FT90x_USBD_UVC_Webcam - Creates a USB device emulating a UVC webcam using the built-in camera interface of the FT90x and OV965x or OV5640 sensor. The FT90x appears as a Camera device and streams compressed or uncompressed data to the host PC. Compressed streams are only supported if the sensor supports a compressed output. See (Application Note AN_414)[https://brtchip.com/wp-content/uploads/sites/3/2021/07/AN-414-FT90x-UVC-WebCam.pdf]
 
 ## Documents
 The following documents are available from the [BRTChip](https://brtchip.com) website: 
