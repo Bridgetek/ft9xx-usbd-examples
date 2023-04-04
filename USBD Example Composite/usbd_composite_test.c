@@ -59,9 +59,6 @@
 #include <ft900_usbd_dfu.h>
 #include <ft900_usbdx.h>
 
-/* UART support for printf output. */
-#include "tinyprintf.h"
-
 /* For MikroC const qualifier will place variables in Flash
  * not just make them constant.
  */
@@ -820,7 +817,7 @@ DESCRIPTOR_QUALIFIER USB_device_descriptor device_descriptor_midikbd =
  @brief HID Report descriptor for keyboard.
 
  See Device Class Definition for Human Interface Devices (HID) Version 1.11
- from USB Implementers’ Forum USB.org
+ from USB Implementersï¿½ Forum USB.org
 
  0x05, 0x01,             Usage Page: Generic Desktop Controls
  0x09, 0x06,             Usage: Keyboard
@@ -1051,6 +1048,7 @@ struct key_mappings
 	uint8_t alt;
 };
 
+/* NOTE: UK keyboard layout. */
 const struct key_mappings ASCII_scancode[] =
 {
 		{0x0d, 40, 0, 0, 0 }, // Enter key
@@ -1082,7 +1080,7 @@ const struct key_mappings ASCII_scancode[] =
 		{'z', 29, 0, 0, 0 }, {'Z', 29, 1, 0, 0 }, {0x1a, 29, 0, 1, 0 },
 		{'1', 30, 0, 0, 0 }, {'!', 30, 1, 0, 0 },
 		{'2', 31, 0, 0, 0 }, {'"', 31, 1, 0, 0 },
-		{'3', 32, 0, 0, 0 }, {'£', 32, 1, 0, 0 },
+		{'3', 32, 0, 0, 0 }, {0xa3, 32, 1, 0, 0 }, // Note Â£ symbol
 		{'4', 33, 0, 0, 0 }, {'$', 33, 1, 0, 0 },
 		{'5', 34, 0, 0, 0 }, {'%', 34, 1, 0, 0 },
 		{'6', 35, 0, 0, 0 }, {'^', 35, 1, 0, 0 },
@@ -1235,16 +1233,6 @@ void USBD_pipe_isr(uint16_t pipe_bitfields)
 		USBDX_pipe_process(get_pipe(MIDI_EP_DATA_OUT));
 	if (pipe_bitfields & BIT(KBD_EP_NOTIFICATION))
 		USBDX_pipe_process(get_pipe(KBD_EP_NOTIFICATION));
-}
-
-/** @name tfp_putc
- *  @details Machine dependent putc function for tfp_printf (tinyprintf) library.
- *  @param p Parameters (machine dependent)
- *  @param c The character to write
- */
-void tfp_putc(void* p, char c)
-{
-	uart_write((ft900_uart_regs_t*)p, (uint8_t)c);
 }
 
 void ISR_timer(void)
@@ -1714,7 +1702,7 @@ void reset_cb(uint8_t status)
 /* For debugging endpoint transactions. */
 void ep_cb(USBD_ENDPOINT_NUMBER ep_number)
 {
-	tfp_printf("EP%d\r\n", ep_number);
+	printf("EP%d\r\n", ep_number);
 }
 
 /* Signal true for callback. */
@@ -1919,7 +1907,7 @@ static void composite_test(void)
 					send_midi_note_packet(MIDI_EVENT_CIN_NOTE_ON, 0, midi_note, 127);
 
 #ifdef MIDI_DEVICE_DEBUG_ON
-					tfp_printf("-> %d %d; ", midi_note, midi_delay);
+					printf("-> %d %d; ", midi_note, midi_delay);
 #endif // MIDI_DEVICE_DEBUG_ON
 				}
 
@@ -1935,7 +1923,7 @@ static void composite_test(void)
 			if (receive_midi_note_packet(&cin, &cn, &midi_note, &force))
 			{
 #ifdef MIDI_DEVICE_DEBUG_ON
-				tfp_printf("<- %x %d (%d); ", cin, midi_note, force);
+				printf("<- %x %d (%d); ", cin, midi_note, force);
 #endif // MIDI_DEVICE_DEBUG_ON
 			}
 
@@ -1985,9 +1973,9 @@ static void composite_test(void)
 #ifdef KDB_DEVICE_DEBUG_ON
 								// For debugging display character sent.
 								if (isgraph(*pmsg) || isspace(*pmsg))
-									tfp_printf("%c",*pmsg);
+									printf("%c",*pmsg);
 								else
-									tfp_printf("\\x%02x",*pmsg);
+									printf("\\x%02x",*pmsg);
 #endif // KDB_DEVICE_DEBUG_ON
 
 								// Next character.
@@ -2010,7 +1998,7 @@ static void composite_test(void)
 
 #ifdef KDB_DEVICE_DEBUG_ON
 								// For debugging display control character sent.
-								tfp_printf("\\\\%c",*pmsg);
+								printf("\\\\%c",*pmsg);
 #endif // KDB_DEVICE_DEBUG_ON
 
 								pmsg++;
@@ -2113,7 +2101,7 @@ static uint8_t usbd_testing(void)
 				}while (status == USBD_OK);
 			}
 		}
-		tfp_printf("Restarting\r\n");
+		printf("Restarting\r\n");
 	}
 
 	return 0;
@@ -2157,16 +2145,6 @@ void powermanagement_ISR(void)
 
 /* FUNCTIONS ***********************************************************************/
 
-static __attribute__((constructor)) void fnconst(void)
-{
-	sys_reset_all();
-}
-
-static __attribute__((destructor)) void fndest(void)
-{
-	sys_reset_all();
-}
-
 int main(void)
 {
 	sys_reset_all();
@@ -2195,9 +2173,6 @@ int main(void)
 			"\x1B[H"  /* ANSI/VT100 - Move Cursor to Home */
 	);
 
-	/* Enable tfp_printf() functionality... */
-	init_printf(UART0, tfp_putc);
-
 	sys_enable(sys_device_timer_wdt);
 
 	/* Timer A = 1ms */
@@ -2211,13 +2186,13 @@ int main(void)
 	interrupt_attach(interrupt_0, (int8_t)interrupt_0, powermanagement_ISR);
 	interrupt_enable_globally();
 
-	tfp_printf("(C) Copyright, Bridgetek Pte Ltd \r\n");
-	tfp_printf("--------------------------------------------------------------------- \r\n");
-	tfp_printf("Welcome to USB Composite Device Example... \r\n");
-	tfp_printf("\r\n");
-	tfp_printf("Emulate a keyboard and a MIDI device connected to the USB Device Port.\r\n");
-	tfp_printf("Also enable the DFU function.\r\n");
-	tfp_printf("--------------------------------------------------------------------- \r\n");
+	printf("(C) Copyright, Bridgetek Pte Ltd \r\n");
+	printf("--------------------------------------------------------------------- \r\n");
+	printf("Welcome to USB Composite Device Example... \r\n");
+	printf("\r\n");
+	printf("Emulate a keyboard and a MIDI device connected to the USB Device Port.\r\n");
+	printf("Also enable the DFU function.\r\n");
+	printf("--------------------------------------------------------------------- \r\n");
 
 	usbd_testing();
 
