@@ -318,7 +318,7 @@ const uint8_t midi_tune[] =
 /// Echo MIDI notes sent to host on the UART.
 #define MIDI_DEVICE_DEBUG_ON
 /// Number of bytes in a MIDI streaming message.
-#define MIDI_PACKET_SIZE sizeof(midiEventPacket)
+#define MIDI_PACKET_SIZE sizeof(usb_audioMidiEventPacket)
 /// Size of data packet sent to host for each MIDI note.
 #define MIDI_DATA_IN_PACKET_SIZE MIDI_PACKET_SIZE
 /// Size of data packet sent to use by host for each MIDI note.
@@ -351,86 +351,6 @@ const uint8_t midi_tune[] =
 #define KBD_OFF_PERIOD_LONG 300
 /// How long to press key for (in ms).
 #define KBD_ON_PERIOD    10
-//@}
-
-/** @name MIDI class definitions
- * @brief Definitions to extend the audio class for MIDI streaming.
- */
-//@{
-// A.1 MS Class-Specific Interface Descriptor Subtypes
-#define USB_DESCRIPTOR_SUBTYPE_MIDI_MS_DESCRIPTOR_UNDEFINED 0x00
-#define USB_DESCRIPTOR_SUBTYPE_MIDI_MS_HEADER 0x01
-#define USB_DESCRIPTOR_SUBTYPE_MIDI_IN_JACK 0x02
-#define USB_DESCRIPTOR_SUBTYPE_MIDI_OUT_JACK 0x03
-#define USB_DESCRIPTOR_SUBTYPE_MIDI_ELEMENT 0x04
-
-// A.2 MS Class-Specific Endpoint Descriptor Subtypes
-#define USB_ENDPOINT_DESCRIPTOR_MIDI_CS_DESCRIPTOR_UNDEFINED 0x00
-#define USB_ENDPOINT_DESCRIPTOR_MIDI_CS_MS_GENERAL 0x01
-
-// A.3 MS MIDI IN and OUT Jack types
-#define USB_AUDIO_MIDI_JACK_TYPE_UNDEFINED 0x00
-#define USB_AUDIO_MIDI_JACK_TYPE_EMBEDDED 0x01
-#define USB_AUDIO_MIDI_JACK_TYPE_EXTERNAL 0x02
-
-// External and Embedded.
-typedef struct PACK _usb_audioMidiInJackDescriptor_t {
-    unsigned char  bLength;
-    unsigned char  bDescriptorType;
-    unsigned char  bDescriptorSubtype;
-    unsigned char  bJackType;
-    unsigned char  bJackID;
-    unsigned char  iJack; // Unused.
-} usb_audioMidiJackInDescriptor_t;
-
-// External and Embedded.
-#define usb_audioMidiOutJackDescriptor_t(A) \
-struct PACK \
-{ \
-    unsigned char  bLength; \
-    unsigned char  bDescriptorType; \
-    unsigned char  bDescriptorSubtype; \
-    unsigned char  bJackType; \
-    unsigned char  bJackID; \
-    unsigned char  bNrInputPins; \
-    struct { \
-    	unsigned char  ID; \
-    	unsigned char  Pin; \
-    } BaSource[A]; \
-    unsigned char  iJack; \
-}
-
-#define usb_audioMidiStreamingBulkEpDescriptor_t(A) \
-struct PACK \
-{ \
-    unsigned char  bLength; \
-    unsigned char  bDescriptorType; \
-    unsigned char  bDescriptorSubtype; \
-    unsigned char  bNumEmbMIDIJack; \
-    unsigned char  BaAssocJackID[A]; \
-}
-
-// V1.0 Table 4-2: Class-Specific AC Interface Header Descriptor
-typedef struct PACK _usb_audioMidiStreamingInterfaceHeaderDescriptor_t
-{
-    unsigned char  bLength;
-    unsigned char  bDescriptorType;
-    unsigned char  bDescriptorSubtype;
-    unsigned short bcdADC;
-    unsigned short wTotalLength;
-} usb_audioMidiStreamingInterfaceHeaderDescriptor_t;
-
-// Table 4-1: Code Index Number Classifications
-#define MIDI_EVENT_CIN_NOTE_ON 0x9
-#define MIDI_EVENT_CIN_NOTE_OFF 0x8
-
-typedef struct PACK _midiEventPacket
-{
-	unsigned char bmCIN_CN;
-	unsigned char bMIDI_0;
-	unsigned char bMIDI_1;
-	unsigned char bMIDI_2;
-} midiEventPacket;
 //@}
 
 /* GLOBAL VARIABLES ****************************************************************/
@@ -1785,7 +1705,8 @@ static void send_midi_note_packet(uint8_t cin, uint8_t cn, uint8_t note, uint8_t
 	/* If have enough URB space */
 	if (free >= MIDI_DATA_IN_PACKET_SIZE)
 	{
-		midiEventPacket *pmsg = (midiEventPacket *)urb->ptr;
+		usb_audioMidiEventPacket *pmsg = (usb_audioMidiEventPacket *)urb->ptr;
+		urb->ptr += sizeof(usb_audioMidiEventPacket);
 
 		pmsg->bmCIN_CN = ((cn & 0xf) << 4) | (cin & 0xf);
 		pmsg->bMIDI_0 = (cin & 0xf) << 4;
@@ -1823,10 +1744,10 @@ static uint8_t receive_midi_note_packet(uint8_t *cin, uint8_t *cn, uint8_t *note
 
 		if (urb_len >= MIDI_DATA_OUT_PACKET_SIZE)
 		{
-			midiEventPacket *pmsg = (midiEventPacket *)urb->ptr;
+			usb_audioMidiEventPacket *pmsg = (usb_audioMidiEventPacket *)urb->ptr;
 
-			if (((pmsg->bmCIN_CN & 0xf) == MIDI_EVENT_CIN_NOTE_OFF) ||
-					((pmsg->bmCIN_CN & 0xf) == MIDI_EVENT_CIN_NOTE_ON))
+			if (((pmsg->bmCIN_CN & 0xf) == USB_AUDIO_MIDI_EVENT_CIN_NOTE_OFF) ||
+					((pmsg->bmCIN_CN & 0xf) == USB_AUDIO_MIDI_EVENT_CIN_NOTE_ON))
 			{
 				*cin = pmsg->bmCIN_CN & 0xf;
 				*cn = (pmsg->bmCIN_CN >> 4) & 0xf;
@@ -1904,7 +1825,7 @@ static void composite_test(void)
 					CRITICAL_SECTION_END
 
 					// Turn on the next note
-					send_midi_note_packet(MIDI_EVENT_CIN_NOTE_ON, 0, midi_note, 127);
+					send_midi_note_packet(USB_AUDIO_MIDI_EVENT_CIN_NOTE_ON, 0, midi_note, 127);
 
 #ifdef MIDI_DEVICE_DEBUG_ON
 					printf("-> %d %d; ", midi_note, midi_delay);
@@ -1914,7 +1835,7 @@ static void composite_test(void)
 				if (midi_last_note > 0)
 				{
 					// Turn off the previous note
-					send_midi_note_packet(MIDI_EVENT_CIN_NOTE_OFF, 0, midi_last_note, 0);
+					send_midi_note_packet(USB_AUDIO_MIDI_EVENT_CIN_NOTE_OFF, 0, midi_last_note, 0);
 					midi_last_note = 0;
 				}
 			}
